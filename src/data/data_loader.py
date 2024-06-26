@@ -1,4 +1,3 @@
-# data_loader.py
 import os
 import torch
 from torchvision import datasets, transforms

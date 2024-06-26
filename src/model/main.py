@@ -7,13 +7,17 @@ import torch.optim as optim
 import torch.nn as nn
 import matplotlib.pyplot as plt
 from sklearn.metrics import f1_score
+from PIL import Image
+from torchvision import transforms
+
+# Assumez que vous avez déjà défini vos fonctions et importé vos modules comme indiqué précédemment...
+
 parent_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 sys.path.append(parent_dir)
-
 from data.data_loader import get_data_loaders
 from model import CardClassifier
 
-# Charger les DataLoader
+# get the data
 train_loader, test_loader, valid_loader, class_names = get_data_loaders(
     train_dir="../../Dataset/archive/train",
     test_dir="../../Dataset/archive/test",
@@ -22,16 +26,16 @@ train_loader, test_loader, valid_loader, class_names = get_data_loaders(
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-# Instancier le modèle
+# get the model architecture
 model = CardClassifier(num_classes=53).to(device)
 
-# Définition de la fonction de perte et de l'optimiseur
+
 criterion = nn.CrossEntropyLoss()
 optimizer = optim.Adam(model.parameters(), lr=0.001)
 
-# Entraînement du modèle
-num_epochs = 5
-percentage_of_data = 1  # Ajustez ce pourcentage si nécessaire
+# training part
+num_epochs = 2
+percentage_of_data = 1
 numberOfData = int(len(train_loader) * percentage_of_data)
 start_time = time.time()
 
@@ -84,7 +88,7 @@ plt.xlabel("Epoch")
 plt.ylabel("F1 Score")
 plt.show()
 
-# Enregistrer le modèle
+# sabe the model
 identifier = str(random.randint(1, 10000))
 directory = identifier
 parent_dir = "results"
@@ -100,6 +104,80 @@ plt.show()
 end_time = time.time()
 print(f"Training completed in {end_time - start_time:.2f} seconds")
 
-# Sauvegarder le modèle
+# Sauvegarder le modèle entraîné
 filename = os.path.join(parent_dir, directory, "saved_model.pth")
 torch.save(model.state_dict(), filename)
+
+# evaluate the model
+model.eval()
+true_labels, predicted_labels = [], []
+
+with torch.no_grad():
+    for inputs, labels in test_loader:
+        inputs, labels = inputs.to(device), labels.to(device)
+        outputs = model(inputs)
+        _, predicted = torch.max(outputs, 1)
+        true_labels.extend(labels.cpu().tolist())
+        predicted_labels.extend(predicted.cpu().tolist())
+
+f1 = f1_score(true_labels, predicted_labels, average='macro')
+print(f"F1 score on test set: {f1:.2f}")
+
+
+# feature map function
+def visualize_feature_maps(image_path, model):
+    transform = transforms.Compose([
+        transforms.Resize((224, 224)),
+        transforms.ToTensor()
+    ])
+    image = Image.open(image_path)
+    image_tensor = transform(image).unsqueeze(0).to(device)
+    model.eval()
+    activations = model.intermediate(image_tensor)
+    for i, activation in enumerate(activations):
+        num_feature_maps = activation.shape[1]
+        num_cols = 8
+        num_rows = (num_feature_maps // num_cols) + int(num_feature_maps % num_cols != 0)
+        plt.figure(figsize=(num_cols * 2, num_rows * 2))
+        plt.suptitle(f"Layer {i + 1} - {activation.shape}")
+        for j in range(num_feature_maps):
+            plt.subplot(num_rows, num_cols, j + 1)
+            # Detach the tensor from the computation graph before converting to numpy
+            plt.imshow(activation[0, j].detach().cpu().numpy(), cmap='viridis')
+            plt.axis('off')
+        plt.show()
+
+
+image_path = "../../Dataset/archive/train/eight of diamonds/005.jpg"
+visualize_feature_maps(image_path, model)
+
+
+# visualization of some prediction
+def visualize_predictions(model, dataloader, class_names, num_images=5):
+    model.eval()
+    images_so_far = 0
+    fig = plt.figure(figsize=(15, 15))
+    with torch.no_grad():
+        dataloader_iter = iter(dataloader)
+        while images_so_far < num_images:
+            try:
+                images, labels = next(dataloader_iter)
+                outputs = model(images.to(device))
+                _, preds = torch.max(outputs, 1)
+                for i in range(images.size(0)):
+                    if images_so_far >= num_images:
+                        break
+                    images_so_far += 1
+                    ax = plt.subplot(num_images // 2, 2, images_so_far)
+                    ax.axis('off')
+                    ax.set_title(f'Predicted: {class_names[preds[i]]}\nActual: {class_names[labels[i]]}')
+                    img = images[i].cpu().numpy().transpose((1, 2, 0))
+                    img = img * 0.229 + 0.485  # Unnormalize
+                    plt.imshow(img)
+            except StopIteration:
+                break
+    plt.tight_layout()
+    plt.show()
+
+visualize_predictions(model, test_loader, class_names, num_images=8)
+

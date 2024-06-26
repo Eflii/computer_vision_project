@@ -1,11 +1,10 @@
 import os
 import sys
-
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from torchvision import datasets, transforms, models
-from torch.utils.data import DataLoader
+from torchvision import  models
+
 import matplotlib.pyplot as plt
 from sklearn.metrics import f1_score
 import time
@@ -14,7 +13,7 @@ sys.path.append(parent_dir)
 
 from data.data_loader import get_data_loaders
 
-# Récupérer les DataLoader
+# get the DataLoader
 train_loader, test_loader, valid_loader, class_names = get_data_loaders(
     train_dir="../../Dataset/archive/train",
     test_dir="../../Dataset/archive/test",
@@ -52,6 +51,7 @@ class CardClassifier(nn.Module):
         x = self.fc2(x)
         return x
 
+#getting all the models i want to test
 models_dict = {
     "custom_model": CardClassifier(num_classes=53),
     "resnet18": models.resnet18(pretrained=True),
